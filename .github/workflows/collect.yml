@@ -1,68 +1,43 @@
 name: collect
-on: [push, workflow_dispatch]
+on: [workflow_dispatch]
+permissions:
+ contents: write
 jobs:
-  collect:
-    runs-on: ubuntu-latest
-    permissions: {contents: write}
-    steps:
-    - uses: actions/checkout@v4
-    - name: fetch
-      run: |
-        cat > /tmp/get.py <<'PY'
-        import requests, os, json
-        s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
-        base='https://r.jina.ai/https://www.finefoods.it'
-        out=[]
-        # WP API media enumerate many
-        for page in range(1,101):
-         try:
-          u=base+'/wp-json/wp/v2/media';r=s.get(u,params={'per_page':100,'page':page},timeout=40)
-          print('page',page,r.status_code,len(r.content))
-          if r.status_code!=200:
-           try: print(r.text[:200])
-           except: pass
-           break
-          arr=r.json();
-          if not arr: break
-          out+=arr
-         except Exception as e: print(e);break
-        os.makedirs('data',exist_ok=True)
-        open('data/media.json','w').write(json.dumps(out,indent=1))
-        print('total',len(out))
-        # also posts/pages search API
-        for typ in ['posts','pages']:
-         all=[]
-         for p in range(1,51):
-          
-          try: r=s.get(base+'/wp-json/wp/v2/'+typ,params={'per_page':100,'page':p},timeout=60)
-          except: break
-          if r.status_code!=200: break
-          try: all+=r.json()
-          except: break
-         open('data/'+typ+'.json','w').write(json.dumps(all,indent=1));print(typ,len(all))
-        # download likely pdf urls from media
-        sel=[]
-        for m in out:
-         url=m.get('source_url',''); title=(m.get('slug','')+' '+str(m.get('title',{}).get('rendered',''))+' '+url).lower()
-         if url.lower().endswith('.pdf') and any(k in title for k in ['2021','2022','2023','2024','bilanc','finanzi','semestr','interim','annual','relazione','consolid','resoconto','settembre']): sel.append((url,title))
-        print('selected',len(sel))
-        open('data/selected.txt','w').write('\n'.join(u+' '+t for u,t in sel))
-        for i,(url,title) in enumerate(sel):
-         try:
-          r=s.get('https://r.jina.ai/'+url,timeout=180)
-          print(i,url,r.status_code,len(r.content))
-          if r.status_code==200 and len(r.content)<90_000_000:
-           name=url.split('/')[-1].split('?')[0]
-           # unique
-           name=str(i)+'_'+name
-           open('data/'+name+'.txt','wb').write(r.content)
-         except Exception as e: print(e)
-        PY
-        python /tmp/get.py
-    - name: commit
-      run: |
-        git config user.name bot
-        git config user.email bot@example.com
-        git add data
-        git commit -m data || true
-        git push
+ collect:
+  runs-on: ubuntu-latest
+  steps:
+   - uses: actions/checkout@v4
+   - name: search
+     run: |
+      cat > /tmp/query.py <<'PY'
+      import requests
+      s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36'
+      urls=[
+       'https://www.google.com/search?q=fine+foods+pharmaceuticals+ntm+bilancio+2023+pdf',
+       'https://www.google.com/search?q=site%3Afinefoods.it+pdf+2023',
+       'https://www.google.com/search?q=finefoodspharma+annual+report',
+       'https://www.google.com/search?q=Fine+Foods+%26+Pharmaceuticals+NTM+semestrale+2024',
+       'https://www.bing.com/search?q=site%3Afinefoods.it+pdf',
+       'https://www.bing.com/search?q=Fine+Foods+Pharmaceuticals+NTM+bilancio+pdf',
+       'https://search.yahoo.com/search?p=site%3Afinefoods.it+pdf',
+       'https://duckduckgo.com/html/?q=Fine%20Foods%20Pharmaceuticals%20NTM%20pdf',
+       'https://r.jina.ai/https://www.google.com/search?q=site%3Afinefoods.it+pdf+2023',
+       'https://r.jina.ai/https://www.bing.com/search?q=Fine+Foods+Pharmaceuticals+NTM+annual+report',
+       'https://r.jina.ai/https://duckduckgo.com/html/?q=site%3Afinefoods.it%20pdf'
+      ]
+      import os;os.makedirs('data',exist_ok=True)
+      for i,u in enumerate(urls):
+       try:
+        r=s.get(u,timeout=50);print(i,u[:30],r.status_code,len(r.content),r.url)
+        open(f'data/s{i}.html','wb').write(r.content)
+       except Exception as e: print(e)
+      # try borsa
+      for i,u in enumerate(['https://www.borsaitaliana.it/borsa/azioni/elenco-completo.html','https://r.jina.ai/https://www.borsaitaliana.it/borsa/azioni/elenco-completo.html']):
+       try:r=s.get(u,timeout=50);print('b',i,r.status_code,len(r.content));open(f'data/b{i}','wb').write(r.content)
+       except Exception as e: print(e)
+      PY
+      python /tmp/query.py
+   - name: commit
+     run: |
+      git config user.name bot; git config user.email bot@bot
+      git add data; git commit -m data || true;git push

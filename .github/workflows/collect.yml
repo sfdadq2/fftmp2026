@@ -7,37 +7,23 @@ jobs:
   runs-on: ubuntu-latest
   steps:
    - uses: actions/checkout@v4
-   - name: search
+   - name: fetch
      run: |
       cat > /tmp/query.py <<'PY'
-      import requests
-      s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36'
-      urls=[
-       'https://www.google.com/search?q=fine+foods+pharmaceuticals+ntm+bilancio+2023+pdf',
-       'https://www.google.com/search?q=site%3Afinefoods.it+pdf+2023',
-       'https://www.google.com/search?q=finefoodspharma+annual+report',
-       'https://www.google.com/search?q=Fine+Foods+%26+Pharmaceuticals+NTM+semestrale+2024',
-       'https://www.bing.com/search?q=site%3Afinefoods.it+pdf',
-       'https://www.bing.com/search?q=Fine+Foods+Pharmaceuticals+NTM+bilancio+pdf',
-       'https://search.yahoo.com/search?p=site%3Afinefoods.it+pdf',
-       'https://duckduckgo.com/html/?q=Fine%20Foods%20Pharmaceuticals%20NTM%20pdf',
-       'https://r.jina.ai/https://www.google.com/search?q=site%3Afinefoods.it+pdf+2023',
-       'https://r.jina.ai/https://www.bing.com/search?q=Fine+Foods+Pharmaceuticals+NTM+annual+report',
-       'https://r.jina.ai/https://duckduckgo.com/html/?q=site%3Afinefoods.it%20pdf'
-      ]
-      import os;os.makedirs('data',exist_ok=True)
+      import requests,os
+      s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125 Safari/537.36';os.makedirs('data2',exist_ok=True)
+      # yahoo/ddg targeted
+      queries=['site:finefoods.it/wp-content/uploads 2023 bilancio','site:finefoods.it/wp-content/uploads 2022 "Annual Financial Report"','site:finefoods.it/wp-content/uploads 2021 bilancio','site:finefoods.it/wp-content/uploads 2024 semestrale','site:finefoods.it/wp-content/uploads 2024 interim financial report','site:finefoods.it/wp-content/uploads settembre 2024','site:finefoods.it/wp-content/uploads 2023 relazione finanziaria','site:finefoods.it/wp-content/uploads 2022 semestrale','Fine Foods Pharmaceuticals relazione finanziaria annuale 2023 pdf','site:finefoods.it wp-content 2024 risultati','site:finefoods.it/wp-content/uploads 2023 consolidated','site:finefoods.it/wp-content/uploads 2024 press release september']
+      for i,q in enumerate(queries):
+       for eng,u in [('y','https://search.yahoo.com/search?p='+requests.utils.quote(q)),('d','https://duckduckgo.com/html/?q='+requests.utils.quote(q))]:
+        try:r=s.get(u,timeout=50);print(i,eng,r.status_code,len(r.content));open(f'data2/{eng}{i}','wb').write(r.content)
+        except Exception as e:print(e)
+      urls=['https://r.jina.ai/https://www.finefoods.it/en/financial-reports/','https://r.jina.ai/https://www.finefoods.it/investor-relations-bilanci-e-relazioni/','https://r.jina.ai/https://www.finefoods.it/en/investor-relations-en/','https://r.jina.ai/https://www.finefoods.it/investor-relations/','https://r.jina.ai/https://www.finefoods.it/wp-content/uploads/2025/03/Annual-Financial-Report-as-of-31.12.2024-with-opinion.pdf','https://www.finefoods.it/wp-content/uploads/2025/03/Annual-Financial-Report-as-of-31.12.2024-with-opinion.pdf']
       for i,u in enumerate(urls):
-       try:
-        r=s.get(u,timeout=50);print(i,u[:30],r.status_code,len(r.content),r.url)
-        open(f'data/s{i}.html','wb').write(r.content)
-       except Exception as e: print(e)
-      # try borsa
-      for i,u in enumerate(['https://www.borsaitaliana.it/borsa/azioni/elenco-completo.html','https://r.jina.ai/https://www.borsaitaliana.it/borsa/azioni/elenco-completo.html']):
-       try:r=s.get(u,timeout=50);print('b',i,r.status_code,len(r.content));open(f'data/b{i}','wb').write(r.content)
-       except Exception as e: print(e)
+       try:r=s.get(u,timeout=240);print('u',i,r.status_code,len(r.content));open(f'data2/u{i}','wb').write(r.content)
+       except Exception as e:print(e)
       PY
       python /tmp/query.py
    - name: commit
      run: |
-      git config user.name bot; git config user.email bot@bot
-      git add data; git commit -m data || true;git push
+      git config user.name bot;git config user.email bot@bot;git add data2;git commit -m data2 || true;git push

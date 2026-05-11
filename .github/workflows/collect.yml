@@ -1,0 +1,66 @@
+name: collect
+on: [push, workflow_dispatch]
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+    - uses: actions/checkout@v4
+    - name: fetch
+      run: |
+        cat > /tmp/get.py <<'PY'
+        import requests, os, json
+        s=requests.Session();s.headers['User-Agent']='Mozilla/5.0'
+        base='https://www.finefoods.it'
+        out=[]
+        # WP API media enumerate many
+        for page in range(1,101):
+         try:
+          u=base+'/wp-json/wp/v2/media';r=s.get(u,params={'per_page':100,'page':page},timeout=40)
+          print('page',page,r.status_code,len(r.content))
+          if r.status_code!=200:
+           try: print(r.text[:200])
+           except: pass
+           break
+          arr=r.json();
+          if not arr: break
+          out+=arr
+         except Exception as e: print(e);break
+        os.makedirs('data',exist_ok=True)
+        open('data/media.json','w').write(json.dumps(out,indent=1))
+        print('total',len(out))
+        # also posts/pages search API
+        for typ in ['posts','pages']:
+         all=[]
+         for p in range(1,51):
+          r=s.get(base+'/wp-json/wp/v2/'+typ,params={'per_page':100,'page':p},timeout=40)
+          if r.status_code!=200: break
+          try: all+=r.json()
+          except: break
+         open('data/'+typ+'.json','w').write(json.dumps(all,indent=1));print(typ,len(all))
+        # download likely pdf urls from media
+        sel=[]
+        for m in out:
+         url=m.get('source_url',''); title=(m.get('slug','')+' '+str(m.get('title',{}).get('rendered',''))+' '+url).lower()
+         if url.lower().endswith('.pdf') and any(k in title for k in ['2021','2022','2023','2024','bilanc','finanzi','semestr','interim','annual','relazione','consolid','resoconto','settembre']): sel.append((url,title))
+        print('selected',len(sel))
+        open('data/selected.txt','w').write('\n'.join(u+' '+t for u,t in sel))
+        for i,(url,title) in enumerate(sel):
+         try:
+          r=s.get(url,timeout=120)
+          print(i,url,r.status_code,len(r.content))
+          if r.status_code==200 and len(r.content)<90_000_000:
+           name=url.split('/')[-1].split('?')[0]
+           # unique
+           name=str(i)+'_'+name
+           open('data/'+name,'wb').write(r.content)
+         except Exception as e: print(e)
+        PY
+        python /tmp/get.py
+    - name: commit
+      run: |
+        git config user.name bot
+        git config user.email bot@example.com
+        git add data
+        git commit -m data || true
+        git push
